@@ -16,7 +16,8 @@
     --text-dim: rgba(255,255,255,0.6);
     --bg: #000000;
     --overlay-grad: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 40%, transparent 70%);
-    --side-size: 52px;
+    --side-size: clamp(42px, 10vw, 50px);
+    --nav-height: 84px;
     --font-ui: 'DM Sans', sans-serif;
     --font-display: 'Space Grotesk', sans-serif;
     --ease-snap: cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -124,7 +125,7 @@
   .slide {
     position: relative;
     width: 100%;
-    height: 100svh;
+    height: 100%;
     scroll-snap-align: start;
     scroll-snap-stop: always;
     overflow: hidden;
@@ -182,9 +183,9 @@
   .info {
     position: absolute;
     bottom: 0; left: 0;
-    right: 80px;
+    right: 72px;
     z-index: 20;
-    padding: 20px 16px 36px;
+    padding: 18px 14px calc(var(--nav-height) + env(safe-area-inset-bottom, 0px) + 18px);
   }
   .username {
     font-family: var(--font-display);
@@ -255,19 +256,20 @@
   .actions {
     position: absolute;
     right: 10px;
-    bottom: 80px;
+    bottom: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px) + 8px);
     z-index: 20;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 20px;
+    gap: 14px;
   }
   .avatar-wrap {
     position: relative;
     margin-bottom: 4px;
   }
   .avatar {
-    width: 46px; height: 46px;
+    width: clamp(38px, 9vw, 44px);
+    height: clamp(38px, 9vw, 44px);
     border-radius: 50%;
     border: 2px solid #fff;
     overflow: hidden;
@@ -318,9 +320,9 @@
   }
   .action-btn:active .action-icon { transform: scale(0.9); }
   .action-btn.liked .action-icon { background: rgba(255,45,85,0.25); }
-  .action-icon svg { width: 24px; height: 24px; }
+  .action-icon svg { width: clamp(18px, 5vw, 22px); height: clamp(18px, 5vw, 22px); }
   .action-label {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
     color: var(--text-dim);
     line-height: 1;
@@ -519,7 +521,8 @@
     display: flex;
     justify-content: space-around;
     align-items: center;
-    padding: 8px 0 20px;
+    height: var(--nav-height);
+    padding: 8px 0 calc(14px + env(safe-area-inset-bottom, 0px));
     background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 100%);
     pointer-events: none;
   }
@@ -531,7 +534,7 @@
     cursor: pointer;
     pointer-events: all;
     -webkit-tap-highlight-color: transparent;
-    padding: 4px 12px;
+    padding: 4px 10px;
     transition: opacity 0.2s;
   }
   .nav-item:active { opacity: 0.7; }
@@ -540,7 +543,7 @@
   .nav-item.active .nav-label { color: #fff; }
 
   .nav-add {
-    width: 46px; height: 30px;
+    width: 42px; height: 28px;
     background: var(--accent);
     border-radius: 8px;
     display: flex;
@@ -706,13 +709,28 @@ const videos = [
   },
 ];
 
+const MAX_FEED_ITEMS = 30;
+
 // ─── State ───
 let currentIdx = 0;
 let likedVideos = new Set();
 let followedUsers = new Set();
 let scrollHintHidden = false;
 let lastTapTime = 0;
+let loadedCount = 0;
 const feed = document.getElementById('feed');
+
+function getVideoAt(idx) {
+  const source = videos[idx % videos.length];
+  return {
+    ...source,
+    commentData: source.commentData.map((c) => ({ ...c })),
+  };
+}
+
+function getTotalSlidesLabel() {
+  return loadedCount < MAX_FEED_ITEMS ? `${loadedCount}+` : `${loadedCount}`;
+}
 
 // ─── Build slides ───
 function formatNum(n) {
@@ -951,7 +969,7 @@ function toggleLike(idx, btn, data) {
 }
 
 function triggerDoubleTapLike(e, idx, slide) {
-  const data = videos[idx];
+  const data = getVideoAt(idx);
   if (!likedVideos.has(idx)) {
     const likeBtns = slide.querySelectorAll('.like-btn');
     likeBtns.forEach(btn => toggleLike(idx, btn, data));
@@ -962,7 +980,7 @@ function triggerDoubleTapLike(e, idx, slide) {
   heart.style.left = (e.clientX - 25) + 'px';
   heart.style.top = (e.clientY - 25) + 'px';
   heart.innerHTML = `<svg width="50" height="50" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="#FF2D55"/></svg>`;
-  document.body.appendChild(heart);
+  document.getElementById('app').appendChild(heart);
   setTimeout(() => heart.remove(), 900);
 }
 
@@ -1067,13 +1085,14 @@ const observer = new IntersectionObserver((entries) => {
 
         // Counter
         const counter = document.getElementById('vid-counter');
-        counter.textContent = `${currentIdx + 1} / ${videos.length}`;
+        counter.textContent = `${currentIdx + 1} / ${getTotalSlidesLabel()}`;
         counter.classList.add('show');
         clearTimeout(counter._t);
         counter._t = setTimeout(() => counter.classList.remove('show'), 1800);
 
-        // Preload next
-        if (idx + 1 < videos.length) preloadVideo(idx + 1);
+        // Load and preload upcoming slides dynamically
+        if (idx + 2 >= loadedCount) ensureSlidesLoaded(idx + 4);
+        if (idx + 1 < loadedCount) preloadVideo(idx + 1);
 
         // Scroll hint
         if (!scrollHintHidden) {
@@ -1085,12 +1104,18 @@ const observer = new IntersectionObserver((entries) => {
   });
 }, { threshold: [0, 0.6, 1.0] });
 
-// ─── Build feed ───
-videos.forEach((data, idx) => {
-  const slide = createSlide(data, idx);
-  feed.appendChild(slide);
-  observer.observe(slide);
-});
+function ensureSlidesLoaded(targetIdx) {
+  while (loadedCount <= targetIdx && loadedCount < MAX_FEED_ITEMS) {
+    const data = getVideoAt(loadedCount);
+    const slide = createSlide(data, loadedCount);
+    feed.appendChild(slide);
+    observer.observe(slide);
+    loadedCount += 1;
+  }
+}
+
+// ─── Build feed (dynamic batches) ───
+ensureSlidesLoaded(3);
 
 // ─── Auto-play first ───
 setTimeout(() => playVideo(0), 300);
@@ -1098,12 +1123,13 @@ setTimeout(() => playVideo(0), 300);
 // ─── Keyboard nav ───
 document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown' || e.key === 'j') {
-    const next = Math.min(currentIdx + 1, videos.length - 1);
-    feed.children[next].scrollIntoView({ behavior: 'smooth' });
+    const next = Math.min(currentIdx + 1, MAX_FEED_ITEMS - 1);
+    ensureSlidesLoaded(next);
+    feed.children[next]?.scrollIntoView({ behavior: 'smooth' });
   }
   if (e.key === 'ArrowUp' || e.key === 'k') {
     const prev = Math.max(currentIdx - 1, 0);
-    feed.children[prev].scrollIntoView({ behavior: 'smooth' });
+    feed.children[prev]?.scrollIntoView({ behavior: 'smooth' });
   }
   if (e.key === ' ') {
     e.preventDefault();
