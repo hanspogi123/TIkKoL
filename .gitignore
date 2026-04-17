@@ -1,0 +1,7 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Optional local-only large video (do not commit)
+assets/videos/meditate2.mp4
+
